@@ -673,6 +673,22 @@ html, body {
   cursor: pointer;
 }
 .val-modal-btn:hover { opacity: 0.88; }
+
+/* ══ REQUIRED FIELD ASTERISK ══ */
+.field label .req {
+  color: var(--red);
+  margin-left: 3px;
+  font-size: 13px;
+  line-height: 1;
+}
+.req-note {
+  font-size: 11px;
+  color: var(--txt3);
+  padding: 0 20px;
+  margin-bottom: 8px;
+  margin-top: -4px;
+}
+.req-note span { color: var(--red); }
 </style>
 </head>
 <body>
@@ -711,6 +727,7 @@ html, body {
     <!-- ══ STEP 1  Project & Customer ══ -->
     <div class="step-view active" id="step-1">
       <div class="page-title"><span class="icon">🏭</span><h2>Project &amp; Customer Details</h2></div>
+      <div class="req-note"><span>*</span> Required field</div>
       <div style="padding:0 20px 4px;display:flex;justify-content:flex-end;">
         <button onclick="goStep(5)" style="
           background:var(--green-bg);border:1.5px solid var(--green-bd);border-radius:8px;
@@ -722,7 +739,7 @@ html, body {
       <div class="card">
         <div class="card-label">Project Information</div>
         <div class="card-grid-2">
-          <div class="field"><label>Project #</label><input id="f-proj" type="text" placeholder="e.g. 3011187"></div>
+          <div class="field"><label><span class="req">*</span> Project #</label><input id="f-proj" type="text" placeholder="e.g. 3011187"></div>
           <div class="field"><label>Customer Contact</label><input id="f-contact" type="text" placeholder="e.g. Eric Oliveri"></div>
           <div class="field span-2"><label>Plant / Location</label><input id="f-plant" type="text" placeholder="e.g. Ford Oakville Body Decking"></div>
           <div class="field span-2"><label>Program / Process / Cell</label><input id="f-program" type="text" placeholder="e.g. Body Shop / Cell 12"></div>
@@ -765,8 +782,8 @@ html, body {
       <div class="card">
         <div class="card-label">Engineer Information</div>
         <div class="card-grid-2">
-          <div class="field"><label>First Name</label><input id="f-first" type="text" placeholder="e.g. Arnab" oninput="sanitizeName(this)"></div>
-          <div class="field"><label>Last Name</label><input id="f-last" type="text" placeholder="e.g. Joy" oninput="sanitizeName(this)"></div>
+          <div class="field"><label><span class="req">*</span> First Name</label><input id="f-first" type="text" placeholder="e.g. Arnab" oninput="sanitizeName(this)"></div>
+          <div class="field"><label><span class="req">*</span> Last Name</label><input id="f-last" type="text" placeholder="e.g. Joy" oninput="sanitizeName(this)"></div>
           <div class="field span-2"><label>Full Print Name</label><input id="f-print" type="text" placeholder="e.g. Arnab Joy" oninput="sanitizeName(this)"></div>
           <div class="field"><label>Employee # (overrides Last Name in filename)</label><input id="f-emp" type="text" placeholder="e.g. 260216"></div>
           <div class="field"><label>Week Start Date (Monday)</label><input id="f-date" type="date"></div>
@@ -793,6 +810,7 @@ html, body {
     <!-- ══ STEP 3  Daily Work Log ══ -->
     <div class="step-view" id="step-3">
       <div class="page-title"><span class="icon">📅</span><h2>Daily Work Log</h2><p id="s3-wk">Week of —</p></div>
+      <div class="req-note"><span>*</span> At least one day with hours is required</div>
       <div class="summary-row">
         <div class="summary-cell"><div class="val" id="sum-s">0</div><div class="lbl">Straight</div></div>
         <div class="summary-cell"><div class="val" id="sum-ot">0</div><div class="lbl">OT</div></div>
@@ -1385,6 +1403,12 @@ async function buildExcel() {
   else                  s1Xml = setStr(s1Xml, 'I2', proj);
 
   if (S.program) s1Xml = setStr(s1Xml, 'O2', S.program);
+
+  // Write FIR filename as cached value of I3 (formula cell)
+  // I3 formula: CONCATENATE("FIR-", I2, "-", date, "-", M55, reportType)
+  // Writing cached value so it shows without recalculation
+  const firFname = genFname();
+  if (firFname) s1Xml = setFmulV(s1Xml, 'I3', firFname, true);
   if (S.contact) s1Xml = setStr(s1Xml, 'D3', S.contact);
   if (S.phone) {
     const phoneNum = parseFloat(S.phone.replace(/\D/g,''));
@@ -1399,6 +1423,11 @@ async function buildExcel() {
   const empToken = (S.emp || '').trim() || (S.last || '').trim();
   if (empToken)  s1Xml = setStr(s1Xml, 'M55', empToken);
   if (S.print)   s1Xml = setStr(s1Xml, 'B56', S.print);
+
+  // L56 = Date filed — auto-populated with today's date (date of generation)
+  const today = new Date();
+  const excelToday = excelSerial(today);
+  s1Xml = setNum(s1Xml, 'L56', excelToday);
 
   // Day entries
   // day_map[i] = [dateRow, hoursRow, workRow]
@@ -1426,6 +1455,10 @@ async function buildExcel() {
   });
 
   if (S.comments) s1Xml = setStr(s1Xml, 'F48', S.comments);
+
+  // Write FIR filename to O1:AA1 merged cell (top right header)
+  const firName = genFname().replace('.xlsm', '');
+  s1Xml = setInlineStr(s1Xml, 'O1', firName);
 
   // ── Compute totals & write sheet1 formula cached values ──
   const totS    = S.days.reduce((a,d) => a + (d.active ? d.s    || 0 : 0), 0);
