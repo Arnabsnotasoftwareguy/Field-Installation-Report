@@ -1523,6 +1523,10 @@ async function buildExcel() {
   dayMap.forEach(([dr, hr, wr], i) => {
     const dayDate = new Date(sd); dayDate.setDate(sd.getDate() + i);
     s1Xml = setNum(s1Xml, 'A' + dr, excelSerial(dayDate));
+    // Write cached day name to A(dr+1) — one row below the date
+    const dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const dayName  = dayNames[i];
+    s1Xml = setFmulV(s1Xml, 'A' + (parseInt(dr)+1), dayName, true);
   });
 
   dayMap.forEach(([dr, hr, wr], i) => {
