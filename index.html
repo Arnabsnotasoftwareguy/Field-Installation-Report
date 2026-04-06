@@ -689,6 +689,56 @@ html, body {
   margin-top: -4px;
 }
 .req-note span { color: var(--red); }
+
+/* ══ TOAST NOTIFICATION ══ */
+#fir-toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: #1A2540;
+  color: white;
+  border-radius: 14px;
+  padding: 16px 22px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.28);
+  z-index: 9999;
+  max-width: 90vw;
+  width: 360px;
+  opacity: 0;
+  transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.4s ease;
+  pointer-events: none;
+}
+#fir-toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+.toast-icon { font-size: 24px; flex-shrink: 0; margin-top: 2px; }
+.toast-body { flex: 1; }
+.toast-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 16px; font-weight: 800;
+  letter-spacing: 0.5px; margin-bottom: 4px;
+  color: #FFD700;
+}
+.toast-msg { font-size: 13px; color: #B8C4D8; line-height: 1.5; }
+.toast-close {
+  background: none; border: none; color: #B8C4D8;
+  font-size: 18px; cursor: pointer; padding: 0;
+  flex-shrink: 0; align-self: flex-start;
+  margin-top: -2px;
+}
+.toast-close:hover { color: white; }
+@media (max-width: 480px) {
+  #fir-toast {
+    width: calc(100vw - 32px);
+    bottom: 24px;
+    border-radius: 12px;
+  }
+}
 </style>
 </head>
 <body>
@@ -843,6 +893,18 @@ html, body {
         <div class="review-grid" id="s4-summary"></div>
         <div class="fname-label" style="margin-top:16px;">Generated Filename</div>
         <div class="fname-badge" id="s4-fname"></div>
+      </div>
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-label">📅 Filing Date</div>
+        <div style="padding:4px 0 8px;">
+          <div style="font-size:12px;color:var(--txt2);margin-bottom:8px;">
+            Auto-set to today — change if needed before generating
+          </div>
+          <input type="date" id="f-filing-date"
+            style="max-width:200px;padding:8px 12px;border:1.5px solid var(--border);
+                   border-radius:8px;font-size:14px;font-family:'Barlow',sans-serif;"
+            onchange="S.filingDate=this.value">
+        </div>
       </div>
       <div id="err-4" class="alert err"></div>
       <div id="ok-4" class="alert ok">✅ Report ready — tap Download below!</div>
@@ -1194,6 +1256,17 @@ function updateSum() {
 // STEP 4
 // ══════════════════════════════════════════════════════════
 function renderStep4() {
+  // Auto-set filing date to today if not already set
+  if (!S.filingDate) {
+    const t = new Date();
+    const yyyy = t.getFullYear();
+    const mm   = String(t.getMonth()+1).padStart(2,'0');
+    const dd   = String(t.getDate()).padStart(2,'0');
+    S.filingDate = `${yyyy}-${mm}-${dd}`;
+  }
+  // Populate the date field
+  const fdEl = document.getElementById('f-filing-date');
+  if (fdEl) fdEl.value = S.filingDate;
   S.fname = genFname();
   const activeDays = S.days.filter(d=>d.active).length;
   const totalHrs   = S.days.reduce((a,d)=>a+(d.active?(d.s||0)+(d.ot||0)+(d.dt||0)+(d.tt||0):0),0);
@@ -1237,6 +1310,7 @@ async function generateReport() {
     lnk.click();
     saveToHistory();
     clearDraft(); // clear draft after successful generation
+    setTimeout(showToast, 500); // show toast after download starts
   } catch(e) {
     show(document.getElementById('err-4'), 'Error: '+e.message);
     console.error(e);
@@ -1424,10 +1498,13 @@ async function buildExcel() {
   if (empToken)  s1Xml = setStr(s1Xml, 'M55', empToken);
   if (S.print)   s1Xml = setStr(s1Xml, 'B56', S.print);
 
-  // L56 = Date filed — auto-populated with today's date (date of generation)
-  const today = new Date();
-  const excelToday = excelSerial(today);
-  s1Xml = setNum(s1Xml, 'L56', excelToday);
+  // L56 = Date filed — written as formatted string MM/DD/YYYY
+  const filingDateStr = S.filingDate || new Date().toISOString().split('T')[0];
+  const filingDate    = new Date(filingDateStr + 'T12:00:00');
+  const mm  = String(filingDate.getMonth()+1).padStart(2,'0');
+  const dd  = String(filingDate.getDate()).padStart(2,'0');
+  const yyyy = filingDate.getFullYear();
+  s1Xml = setInlineStr(s1Xml, 'L56', `${mm}/${dd}/${yyyy}`);
 
   // Day entries
   // day_map[i] = [dateRow, hoursRow, workRow]
@@ -1459,6 +1536,32 @@ async function buildExcel() {
   // Write FIR filename to O1:AA1 merged cell (top right header)
   const firName = genFname().replace('.xlsm', '');
   s1Xml = setInlineStr(s1Xml, 'O1', firName);
+
+  // ── Write G1 cached value: "Dates Covered (M/D/YYYY - M/D/YYYY)" ──
+  const endDate = new Date(sd); endDate.setDate(sd.getDate() + 6);
+  const fmt = d => `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+  // Check if single day (startDate = endDate active day)
+  const activeDays = S.days.filter(d => d.active);
+  const firstActive = activeDays.length > 0 ? S.days.findIndex(d => d.active) : 0;
+  const lastActive  = activeDays.length > 0 ? 6 - [...S.days].reverse().findIndex(d => d.active) - 1 : 6;
+  const firstDate   = new Date(sd); firstDate.setDate(sd.getDate() + firstActive);
+  const lastDate    = new Date(sd); lastDate.setDate(sd.getDate() + lastActive);
+  const isSingleDay = firstActive === lastActive;
+  const dateLabel   = isSingleDay ? 'Date Covered (' : 'Dates Covered (';
+  const dateRange   = isSingleDay
+    ? fmt(firstDate)
+    : `${fmt(firstDate)} - ${fmt(lastDate)}`;
+  const g1Value = `${dateLabel}${dateRange})`;
+  s1Xml = setFmulV(s1Xml, 'G1', g1Value, true);
+
+  // Write cached values for intermediate date cells (rows 104-107)
+  // so header formula chain works without recalculation
+  const minSerial = excelSerial(firstDate);
+  const maxSerial = excelSerial(lastDate);
+  s1Xml = setFmulV(s1Xml, 'A104', minSerial, false);
+  s1Xml = setFmulV(s1Xml, 'A105', maxSerial, false);
+  s1Xml = setFmulV(s1Xml, 'A106', dateLabel, true);
+  s1Xml = setFmulV(s1Xml, 'A107', dateRange, true);
 
   // ── Compute totals & write sheet1 formula cached values ──
   const totS    = S.days.reduce((a,d) => a + (d.active ? d.s    || 0 : 0), 0);
@@ -2055,6 +2158,30 @@ function dismissDraft() {
 
 // Service worker requires hosted server — skipped for local file use
 
+
+// ══ TOAST NOTIFICATION ══
+function showToast() {
+  const toast = document.getElementById('fir-toast');
+  if (!toast) return;
+  toast.classList.add('show');
+  // Auto-hide after 6 seconds
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => hideToast(), 6000);
+}
+function hideToast() {
+  const toast = document.getElementById('fir-toast');
+  if (toast) toast.classList.remove('show');
+}
+
 </script>
+
+<div id="fir-toast">
+  <div class="toast-icon">✅</div>
+  <div class="toast-body">
+    <div class="toast-title">FIR Generated!</div>
+    <div class="toast-msg">Your FIR has been downloaded. Please double-check your work before submitting.</div>
+  </div>
+  <button class="toast-close" onclick="hideToast()">✕</button>
+</div>
 </body>
 </html>
