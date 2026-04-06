@@ -909,6 +909,9 @@ html, body {
       <div id="err-4" class="alert err"></div>
       <div id="ok-4" class="alert ok">✅ Report ready — tap Download below!</div>
       <div class="btn-single"><button class="btn red" id="gen-btn" onclick="generateReport()">⚙️ &nbsp; GENERATE FIR REPORT</button></div>
+      <div class="btn-single" id="new-report-btn-s4" style="display:none;margin-top:8px;">
+        <button class="btn red" onclick="newReport()" style="width:100%;">＋ New Report</button>
+      </div>
       <div id="dl-area" style="display:none;padding:0 20px;margin-top:10px;">
         <a id="dl-link" class="btn yellow" style="text-decoration:none;"></a>
       </div>
@@ -1311,6 +1314,9 @@ async function generateReport() {
     saveToHistory();
     clearDraft(); // clear draft after successful generation
     setTimeout(showToast, 500); // show toast after download starts
+    // Show New Report button on Step 4
+    const nr4 = document.getElementById('new-report-btn-s4');
+    if (nr4) nr4.style.display = '';
   } catch(e) {
     show(document.getElementById('err-4'), 'Error: '+e.message);
     console.error(e);
@@ -1758,6 +1764,8 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 
 function newReport() {
+  const nr4 = document.getElementById('new-report-btn-s4');
+  if (nr4) nr4.style.display = 'none';
   Object.assign(S,{proj:'',contact:'',plant:'',program:'',phone:'',rtype:'Other (O)',expense:0,exprep:false,first:'',last:'',print:'',emp:'',startDate:null,days:Array.from({length:7},()=>({active:false,s:null,ot:null,dt:null,tt:null,w:null,wait:null,desc:''})),comments:'',fname:'',bytes:null});
   ['f-proj','f-contact','f-plant','f-program','f-phone','f-expense'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   document.getElementById('f-rtype').value='Other (O)';
